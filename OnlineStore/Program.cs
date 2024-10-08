@@ -13,16 +13,14 @@ namespace OnlineStore
             Product iPhone12 = new Product("IPhone 12");
             Product iPhone11 = new Product("IPhone 11");
 
-            Warehouse warehouse = new Warehouse();
+            Shop shop = new Shop();
 
-            Shop shop = new Shop(warehouse);
+            shop.Warehouse.Deliver(iPhone12, 10);
+            shop.Warehouse.Deliver(iPhone11, 1);
 
-            warehouse.Deliver(iPhone12, 10);
-            warehouse.Deliver(iPhone11, 1);
+            shop.Warehouse.ShowAllProducts(); //Вывод всех товаров на складе с их остатком
 
-            //Вывод всех товаров на складе с их остатком
-
-            Cart cart = shop.Cart();
+            Cart cart = shop.Cart;
             cart.Add(iPhone12, 4);
             cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
 
@@ -44,40 +42,70 @@ namespace OnlineStore
         public string Name { get; private set; }
     }
 
-    class Warehouse
+    class Storage
     {
-        private List<GoodsPlace> _products = new List<GoodsPlace>();
+        protected List<GoodsPlace> Cells = new List<GoodsPlace>();
 
+        public void ShowAllProducts()
+        {
+            foreach (GoodsPlace place in Cells)
+                Console.WriteLine($"{place.Product.Name} - {place.Number} шт.");
+        }
+
+        public void Add(Product product, int number)
+        {
+            int failedSearchIndex = -1;
+            int index = SearchProduct(product);
+
+            if (index != failedSearchIndex)
+                Cells[index].AddProduct(number);
+            else
+                Cells.Add(new GoodsPlace(product, number));
+
+        }
+
+        private int SearchProduct(Product product)
+        {
+            int index = -1;
+
+            if (Cells.Count == 0)
+                return index;
+
+            for (int i = 0; i < Cells.Count; i++)
+            {
+                if (Cells[i].Product.Name.ToLower() == product.Name.ToLower())
+                {
+                    index = i;
+                    break;
+                }
+            }
+
+            return index;
+        }
+    }
+
+    class Warehouse : Storage
+    {
         public void Deliver(Product product, int number)
         {
-
+            Add(product, number);
         }
     }
 
-    class Shop
+    class Cart : Storage
     {
-        public Shop(Warehouse warehouse)
-        {
-
-        }
-
-        public Cart Cart()
-        {
-            return new Cart();
-        }
-    }
-
-    class Cart
-    {
-        public void Add(Product good, int number)
-        {
-
-        }
-
         public Payment Order()
         {
             return new Payment(0f, "");
         } 
+    }
+
+    class Shop
+    {
+        public readonly Warehouse Warehouse = new Warehouse();
+        public readonly Cart Cart = new Cart();
+
+
     }
 
     class Payment
@@ -109,14 +137,18 @@ namespace OnlineStore
 
         public void AddProduct(int number)
         {
-            if (number > 0)
-                Number += number;
+            if (number <= 0)
+                throw new ArgumentOutOfRangeException(nameof(number));
+
+            Number += number;
         }
 
         public void RemoveProduct(int number)
         {
-            if (number > 0)
-                Number -= number;
+            if (number <= 0)
+                throw new ArgumentOutOfRangeException(nameof(number));
+
+            Number -= number;
         }
     }
 }
