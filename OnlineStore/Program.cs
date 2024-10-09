@@ -20,15 +20,14 @@ namespace OnlineStore
 
             shop.Warehouse.ShowAllProducts(); //Вывод всех товаров на складе с их остатком
 
-            Cart cart = shop.Cart;
-            cart.Add(iPhone12, 4);
-            cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
+            shop.Cart.Add(iPhone12, 4);
+            shop.Cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
 
             //Вывод всех товаров в корзине
 
-            Console.WriteLine(cart.Order().Paylink);
+            Console.WriteLine(shop.Cart.Order().Paylink);
 
-            cart.Add(iPhone12, 9); //Ошибка, после заказа со склада убираются заказанные товары
+            shop.Cart.Add(iPhone12, 9); //Ошибка, после заказа со склада убираются заказанные товары
         }
     }
 
@@ -44,6 +43,8 @@ namespace OnlineStore
 
     class Storage
     {
+        protected const int FailedSearchIndex = -1;
+
         protected List<GoodsPlace> Cells = new List<GoodsPlace>();
 
         public void ShowAllProducts()
@@ -54,14 +55,31 @@ namespace OnlineStore
 
         public void Add(Product product, int number)
         {
-            int failedSearchIndex = -1;
             int index = SearchProduct(product);
 
-            if (index != failedSearchIndex)
+            if (index != FailedSearchIndex)
                 Cells[index].AddProduct(number);
             else
                 Cells.Add(new GoodsPlace(product, number));
+        }
 
+        public void Remove(Product product, int number)
+        {
+            int correctNumber;
+            int index = SearchProduct(product);
+
+            if (index == FailedSearchIndex)
+                throw new ArgumentException(nameof(product));
+
+            correctNumber = Cells[index].Number;
+
+            if (number > correctNumber)
+                throw new ArgumentOutOfRangeException(nameof(number));
+
+            Cells[index].ReduceQuantity(number);
+
+            if (Cells[index].Number == 0)
+                Cells.RemoveAt(index);
         }
 
         private int SearchProduct(Product product)
@@ -94,18 +112,38 @@ namespace OnlineStore
 
     class Cart : Storage
     {
+        private Warehouse _warehouse;
+
+        public Cart(Warehouse warehouse)
+        {
+            _warehouse = warehouse;
+        }
+
         public Payment Order()
         {
             return new Payment(0f, "");
-        } 
+        }
+        
+        public void Clear()
+        {
+            Cells.Clear();
+        }
+
+        public void BackToWarehouse()
+        {
+
+        }
     }
 
     class Shop
     {
         public readonly Warehouse Warehouse = new Warehouse();
-        public readonly Cart Cart = new Cart();
+        public readonly Cart Cart;
 
-
+        public Shop()
+        {
+            Cart = new Cart(Warehouse);
+        }
     }
 
     class Payment
@@ -143,7 +181,7 @@ namespace OnlineStore
             Number += number;
         }
 
-        public void RemoveProduct(int number)
+        public void ReduceQuantity(int number)
         {
             if (number <= 0)
                 throw new ArgumentOutOfRangeException(nameof(number));
