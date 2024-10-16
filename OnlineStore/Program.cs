@@ -1,8 +1,5 @@
 ﻿using System;
 using System.Collections.Generic;
-using System.Linq;
-using System.Text;
-using System.Threading.Tasks;
 
 namespace OnlineStore
 {
@@ -10,8 +7,8 @@ namespace OnlineStore
     {
         static void Main(string[] args)
         {
-            Product iPhone12 = new Product("IPhone 12");
-            Product iPhone11 = new Product("IPhone 11");
+            Product iPhone12 = new Product("IPhone 12", 20000f);
+            Product iPhone11 = new Product("IPhone 11", 15000f);
 
             Shop shop = new Shop();
 
@@ -28,70 +25,93 @@ namespace OnlineStore
             Console.WriteLine(shop.Cart.Order().Paylink);
 
             shop.Cart.Add(iPhone12, 9); //Ошибка, после заказа со склада убираются заказанные товары
+
+            Console.ReadLine();
         }
+    }
+
+    interface IWarehouse
+    {
+        void GiveOutProduct(Product product, int number);
+        int GetNumberOfProduct(Product product);
     }
 
     class Product
     {
-        public Product(string name)
+        public Product(string name, float price)
         {
             Name = name;
+            Price = price;
         }
 
         public string Name { get; private set; }
+        public float Price { get; private set; }
     }
 
-    class Storage
+    class Storage : IWarehouse
     {
         protected const int FailedSearchIndex = -1;
 
-        protected List<GoodsPlace> Cells = new List<GoodsPlace>();
+        protected List<GoodsPlace> Spots = new List<GoodsPlace>();
 
         public void ShowAllProducts()
         {
-            foreach (GoodsPlace place in Cells)
-                Console.WriteLine($"{place.Product.Name} - {place.Number} шт.");
+            foreach (GoodsPlace spot in Spots)
+                Console.WriteLine($"{spot.Product.Name} - {spot.Number} шт.");
+
+            Console.WriteLine();
         }
 
-        public void Add(Product product, int number)
+        public virtual void Add(Product product, int number)
         {
-            int index = SearchProduct(product);
+            int index = GetSpotIndex(product);
 
             if (index != FailedSearchIndex)
-                Cells[index].AddProduct(number);
+                Spots[index].AddProduct(number);
             else
-                Cells.Add(new GoodsPlace(product, number));
+                Spots.Add(new GoodsPlace(product, number));
         }
 
-        public void Remove(Product product, int number)
+        public void GiveOutProduct(Product product, int number)
         {
             int correctNumber;
-            int index = SearchProduct(product);
+            int index = GetSpotIndex(product);
 
             if (index == FailedSearchIndex)
                 throw new ArgumentException(nameof(product));
 
-            correctNumber = Cells[index].Number;
+            correctNumber = Spots[index].Number;
 
             if (number > correctNumber)
                 throw new ArgumentOutOfRangeException(nameof(number));
 
-            Cells[index].ReduceQuantity(number);
+            Spots[index].ReduceQuantity(number);
 
-            if (Cells[index].Number == 0)
-                Cells.RemoveAt(index);
+            if (Spots[index].Number == 0)
+                Spots.RemoveAt(index);
         }
 
-        private int SearchProduct(Product product)
+        public int GetNumberOfProduct(Product product)
+        {
+            int count = 0;
+            int index = GetSpotIndex(product);
+
+            if (index > FailedSearchIndex)
+                count = Spots[index].Number;
+
+            return count;
+        }
+
+        private int GetSpotIndex(Product product)
         {
             int index = -1;
 
-            if (Cells.Count == 0)
+            if (Spots.Count == 0)
                 return index;
 
-            for (int i = 0; i < Cells.Count; i++)
+            for (int i = 0; i < Spots.Count; i++)
             {
-                if (Cells[i].Product.Name.ToLower() == product.Name.ToLower())
+                if (Spots[i].Product.Name.ToLower() == product.Name.ToLower())
                 {
                     index = i;
                     break;
@@ -112,26 +132,104 @@ namespace OnlineStore
 
     class Cart : Storage
     {
-        private Warehouse _warehouse;
+        private IWarehouse _warehouse;
 
-        public Cart(Warehouse warehouse)
+        public Cart(IWarehouse warehouse)
         {
             _warehouse = warehouse;
         }
 
         public Payment Order()
         {
-            return new Payment(0f, "");
+            Payment payment;
+            float zeroValue = 0f;
+            float totalSum;
+
+            if (CheckRequiredQuantityOfAllProducts())
+            {
+                totalSum = CalculateTotalSum();
+                payment = new Payment(totalSum, $"Оплата заказа на сумму - {totalSum} р.\n");
+                PickUpPurchasedGoodsFromWarehouse();
+                Clear();
+            }
+            else
+            {
+                Console.WriteLine("Невозможно оплатить заказ! Один или несколько товаров отсутствуют на складе!\n");
+                payment = new Payment(zeroValue, "");
+            }
+
+            return payment;
         }
-        
+
+        public override void Add(Product product, int number)
+        {
+            int currentNumber = _warehouse.GetNumberOfProduct(product);
+
+            if (number > currentNumber)
+            {
+                Console.WriteLine($"Невозможно добавить в корзину \"{product.Name}\" - {number} шт., т.к.\n" +
+                                  $"в наличии на складе имеется только {currentNumber} шт.!\n");
+
+                return;
+            }
+
+            base.Add(product, number);
+
+            Console.WriteLine($"\"{product.Name}\" в кол-ве {number} шт. успешно добавлен в корзину.\n");
+        }
+
         public void Clear()
         {
-            Cells.Clear();
+            Spots.Clear();
         }
 
-        public void BackToWarehouse()
+        private bool CheckRequiredQuantityOfAllProducts()
         {
+            bool isEnoughQuantityOfAllProducts = true;
 
+            if (Spots.Count == 0)
+                return false;
+
+            foreach (GoodsPlace cell in Spots)
+            {
+                if (CheckRequiredOfProductQuantity(cell.Product, cell.Number) == false)
+                {
+                    Console.WriteLine($"За время оформления заказа количество товара " +
+                                      $"\"{cell.Product.Name}\" на складе изменилось!");
+
+                    isEnoughQuantityOfAllProducts = false;
+                    break;
+                }
+            }
+
+            return isEnoughQuantityOfAllProducts;
+        }
+
+        private bool CheckRequiredOfProductQuantity(Product product, int requiredNumber)
+        {
+            int currentNumber = _warehouse.GetNumberOfProduct(product);
+            bool result = currentNumber >= requiredNumber;
+
+            if (result == false)
+                throw new ArgumentOutOfRangeException(nameof(requiredNumber));
+
+            return result;
+        }
+
+        private float CalculateTotalSum()
+        {
+            float sum = 0;
+
+            foreach (GoodsPlace cell in Spots)
+                sum += cell.Product.Price * cell.Number;
+
+            return sum;
+        }
+
+        private void PickUpPurchasedGoodsFromWarehouse()
+        {
+            foreach (GoodsPlace spot in Spots)
+                _warehouse.GiveOutProduct(spot.Product, spot.Number);
         }
     }
 
