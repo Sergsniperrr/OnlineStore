@@ -19,7 +19,7 @@ namespace OnlineStore
 
             warehouse.ShowAllProducts(); //Вывод всех товаров на складе с их остатком
 
-            Cart cart = shop.Cart();
+            Cart cart = shop.CreateCart();
             cart.Add(iPhone12, 4);
             cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
 
@@ -35,8 +35,8 @@ namespace OnlineStore
 
     interface IWarehouse
     {
-        void GiveOutProduct(Product product, int number);
-        int GetNumberOfProduct(Product product);
+        void GiveOutProduct(Product product, int count);
+        int GetCountOfProduct(Product product);
     }
 
     class Product
@@ -53,84 +53,80 @@ namespace OnlineStore
 
     class Storage : IWarehouse
     {
-        protected const int FailedSearchIndex = -1;
+        private const int FailedSearchIndex = -1;
 
-        protected List<GoodsPlace> Spots = new List<GoodsPlace>();
+        protected List<Cell> Cells = new List<Cell>();
 
         public void ShowAllProducts()
         {
-            foreach (GoodsPlace spot in Spots)
-                Console.WriteLine($"{spot.Product.Name} - {spot.Number} шт.");
+            foreach (Cell cell in Cells)
+                Console.WriteLine($"{cell.Product.Name} - {cell.Count} шт.");
 
             Console.WriteLine();
         }
 
-        public virtual void Add(Product product, int number)
+        public virtual void Add(Product product, int count)
         {
             if (product == null)
                 throw new ArgumentNullException(nameof(product));
 
-            if (number < 0)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            int index = GetSpotIndex(product);
+            int index = GetCellIndex(product);
 
             if (index != FailedSearchIndex)
-                Spots[index].AddProduct(number);
+                Cells[index].AddProduct(count);
             else
-                Spots.Add(new GoodsPlace(product, number));
+                Cells.Add(new Cell(product, count));
         }
 
-        public void GiveOutProduct(Product product, int number)
+        public void GiveOutProduct(Product product, int count)
         {
-            int correctNumber;
-            int index = GetSpotIndex(product);
-
             if (product == null)
                 throw new ArgumentNullException(nameof(product));
 
-            if (number < 0)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
+
+            int index = GetCellIndex(product);
 
             if (index == FailedSearchIndex)
                 throw new ArgumentException(nameof(product));
 
-            correctNumber = Spots[index].Number;
+            int correctCount = Cells[index].Count;
 
-            if (number > correctNumber)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count > correctCount)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            Spots[index].ReduceQuantity(number);
+            Cells[index].ReduceQuantity(count);
 
-            if (Spots[index].Number == 0)
-                Spots.RemoveAt(index);
+            if (Cells[index].Count == 0)
+                Cells.RemoveAt(index);
         }
 
-        public int GetNumberOfProduct(Product product)
+        public int GetCountOfProduct(Product product)
         {
             int count = 0;
 
             if (product == null)
                 throw new ArgumentNullException(nameof(product));
 
-            int index = GetSpotIndex(product);
+            int index = GetCellIndex(product);
 
             if (index > FailedSearchIndex)
-                count = Spots[index].Number;
+                count = Cells[index].Count;
 
             return count;
         }
 
-        private int GetSpotIndex(Product product)
+        private int GetCellIndex(Product product)
         {
             int index = -1;
 
-            if (Spots.Count == 0)
-                return index;
-
-            for (int i = 0; i < Spots.Count; i++)
+            for (int i = 0; i < Cells.Count; i++)
             {
-                if (Spots[i].Product.Name.ToLower() == product.Name.ToLower())
+                if (Cells[i].Product.Name.ToLower() == product.Name.ToLower())
                 {
                     index = i;
                     break;
@@ -143,9 +139,9 @@ namespace OnlineStore
 
     class Warehouse : Storage
     {
-        public void Deliver(Product product, int number)
+        public void Deliver(Product product, int count)
         {
-            Add(product, number);
+            Add(product, count);
         }
     }
 
@@ -175,52 +171,53 @@ namespace OnlineStore
             return payment;
         }
 
-        public override void Add(Product product, int number)
+        public override void Add(Product product, int count)
         {
             if (product == null)
                 throw new ArgumentNullException(nameof(product));
 
-            int currentNumber = _warehouse.GetNumberOfProduct(product);
+            int countInWarehouse = _warehouse.GetCountOfProduct(product);
+            int currentCount = GetCountOfProduct(product);
 
-            if (number > currentNumber)
-                throw new ArgumentException(nameof(number));
+            if (currentCount + count > countInWarehouse)
+                throw new ArgumentException(nameof(count));
 
-            base.Add(product, number);
+            base.Add(product, count);
         }
 
         public void Clear()
         {
-            Spots.Clear();
+            Cells.Clear();
         }
 
         private void EnsureAllProductsQuantity()
         {
-            foreach (GoodsPlace cell in Spots)
-                EnsureProductQuantity(cell.Product, cell.Number);
+            foreach (Cell cell in Cells)
+                EnsureProductQuantity(cell.Product, cell.Count);
         }
 
-        private void EnsureProductQuantity(Product product, int requiredNumber)
+        private void EnsureProductQuantity(Product product, int requiredCount)
         {
-            int currentNumber = _warehouse.GetNumberOfProduct(product);
+            int currentCount = _warehouse.GetCountOfProduct(product);
 
-            if (currentNumber < requiredNumber)
-                throw new ArgumentOutOfRangeException(nameof(requiredNumber));
+            if (currentCount < requiredCount)
+                throw new ArgumentOutOfRangeException(nameof(requiredCount));
         }
 
         private float CalculateTotalSum()
         {
             float sum = 0;
 
-            foreach (GoodsPlace cell in Spots)
-                sum += cell.Product.Price * cell.Number;
+            foreach (Cell cell in Cells)
+                sum += cell.Product.Price * cell.Count;
 
             return sum;
         }
 
         private void PickUpPurchasedGoodsFromWarehouse()
         {
-            foreach (GoodsPlace spot in Spots)
-                _warehouse.GiveOutProduct(spot.Product, spot.Number);
+            foreach (Cell cell in Cells)
+                _warehouse.GiveOutProduct(cell.Product, cell.Count);
         }
     }
 
@@ -233,7 +230,7 @@ namespace OnlineStore
 
         public Warehouse Warehouse { get; private set; }
 
-        public Cart Cart()
+        public Cart CreateCart()
         {
             return new Cart(Warehouse);
         }
@@ -254,35 +251,35 @@ namespace OnlineStore
         public string Paylink { get; private set; }
     }
 
-    class GoodsPlace
+    class Cell
     {
-        public GoodsPlace(Product products, int number)
+        public Cell(Product products, int count)
         {
             Product = products ?? throw new ArgumentNullException(nameof(products));
 
-            if (number < 0)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count < 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            Number = number;
+            Count = count;
         }
 
         public Product Product { get; private set; }
-        public int Number { get; private set; }
+        public int Count { get; private set; }
 
-        public void AddProduct(int number)
+        public void AddProduct(int count)
         {
-            if (number <= 0)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count <= 0)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            Number += number;
+            Count += count;
         }
 
-        public void ReduceQuantity(int number)
+        public void ReduceQuantity(int count)
         {
-            if (number <= 0 && number > Number)
-                throw new ArgumentOutOfRangeException(nameof(number));
+            if (count <= 0 && count > Count)
+                throw new ArgumentOutOfRangeException(nameof(count));
 
-            Number -= number;
+            Count -= count;
         }
     }
 }
