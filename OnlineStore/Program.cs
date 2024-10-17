@@ -243,6 +243,9 @@ namespace OnlineStore
     {
         public Payment(float sum, string payLink)
         {
+            if (sum < 0f)
+                throw new ArgumentOutOfRangeException(nameof(sum));
+
             Sum = sum;
             Paylink = payLink;
         }
