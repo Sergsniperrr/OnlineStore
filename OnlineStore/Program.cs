@@ -51,7 +51,7 @@ namespace OnlineStore
         public float Price { get; private set; }
     }
 
-    abstract class Storage : IWarehouse
+    class Storage : IWarehouse
     {
         protected const int FailedSearchIndex = -1;
 
