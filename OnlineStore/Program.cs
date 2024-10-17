@@ -10,21 +10,24 @@ namespace OnlineStore
             Product iPhone12 = new Product("IPhone 12", 20000f);
             Product iPhone11 = new Product("IPhone 11", 15000f);
 
-            Shop shop = new Shop();
+            Warehouse warehouse = new Warehouse();
 
-            shop.Warehouse.Deliver(iPhone12, 10);
-            shop.Warehouse.Deliver(iPhone11, 1);
+            Shop shop = new Shop(warehouse);
 
-            shop.Warehouse.ShowAllProducts(); //Вывод всех товаров на складе с их остатком
+            warehouse.Deliver(iPhone12, 10);
+            warehouse.Deliver(iPhone11, 1);
 
-            shop.Cart.Add(iPhone12, 4);
-            shop.Cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
+            warehouse.ShowAllProducts(); //Вывод всех товаров на складе с их остатком
+
+            Cart cart = shop.Cart();
+            cart.Add(iPhone12, 4);
+            cart.Add(iPhone11, 3); //при такой ситуации возникает ошибка так, как нет нужного количества товара на складе
 
             //Вывод всех товаров в корзине
 
-            Console.WriteLine(shop.Cart.Order().Paylink);
+            Console.WriteLine(cart.Order().Paylink);
 
-            shop.Cart.Add(iPhone12, 9); //Ошибка, после заказа со склада убираются заказанные товары
+            cart.Add(iPhone12, 9); //Ошибка, после заказа со склада убираются заказанные товары
 
             Console.ReadLine();
         }
@@ -48,7 +51,7 @@ namespace OnlineStore
         public float Price { get; private set; }
     }
 
-    class Storage : IWarehouse
+    abstract class Storage : IWarehouse
     {
         protected const int FailedSearchIndex = -1;
 
@@ -64,6 +67,12 @@ namespace OnlineStore
 
         public virtual void Add(Product product, int number)
         {
+            if (product == null)
+                throw new ArgumentNullException(nameof(product));
+
+            if (number < 0)
+                throw new ArgumentOutOfRangeException(nameof(number));
+
             int index = GetSpotIndex(product);
 
             if (index != FailedSearchIndex)
@@ -76,6 +85,12 @@ namespace OnlineStore
         {
             int correctNumber;
             int index = GetSpotIndex(product);
+
+            if (product == null)
+                throw new ArgumentNullException(nameof(product));
+
+            if (number < 0)
+                throw new ArgumentOutOfRangeException(nameof(number));
 
             if (index == FailedSearchIndex)
                 throw new ArgumentException(nameof(product));
@@ -94,6 +109,10 @@ namespace OnlineStore
         public int GetNumberOfProduct(Product product)
         {
             int count = 0;
+
+            if (product == null)
+                throw new ArgumentNullException(nameof(product));
+
             int index = GetSpotIndex(product);
 
             if (index > FailedSearchIndex)
@@ -136,46 +155,37 @@ namespace OnlineStore
 
         public Cart(IWarehouse warehouse)
         {
-            _warehouse = warehouse;
+            _warehouse = warehouse ?? throw new ArgumentNullException(nameof(warehouse));
         }
 
         public Payment Order()
         {
             Payment payment;
-            float zeroValue = 0f;
             float totalSum;
 
-            if (CheckRequiredQuantityOfAllProducts())
-            {
-                totalSum = CalculateTotalSum();
-                payment = new Payment(totalSum, $"Оплата заказа на сумму - {totalSum} р.\n");
-                PickUpPurchasedGoodsFromWarehouse();
-                Clear();
-            }
-            else
-            {
-                Console.WriteLine("Невозможно оплатить заказ! Один или несколько товаров отсутствуют на складе!\n");
-                payment = new Payment(zeroValue, "");
-            }
+            EnsureAllProductsQuantity();
+
+            totalSum = CalculateTotalSum();
+            payment = new Payment(totalSum, $"Оплата заказа на сумму - {totalSum} р.\n");
+
+            PickUpPurchasedGoodsFromWarehouse();
+
+            Clear();
 
             return payment;
         }
 
         public override void Add(Product product, int number)
         {
+            if (product == null)
+                throw new ArgumentNullException(nameof(product));
+
             int currentNumber = _warehouse.GetNumberOfProduct(product);
 
             if (number > currentNumber)
-            {
-                Console.WriteLine($"Невозможно добавить в корзину \"{product.Name}\" - {number} шт., т.к.\n" +
-                                  $"в наличии на складе имеется только {currentNumber} шт.!\n");
-
-                return;
-            }
+                throw new ArgumentException(nameof(number));
 
             base.Add(product, number);
-
-            Console.WriteLine($"\"{product.Name}\" в кол-ве {number} шт. успешно добавлен в корзину.\n");
         }
 
         public void Clear()
@@ -183,37 +193,18 @@ namespace OnlineStore
             Spots.Clear();
         }
 
-        private bool CheckRequiredQuantityOfAllProducts()
+        private void EnsureAllProductsQuantity()
         {
-            bool isEnoughQuantityOfAllProducts = true;
-
-            if (Spots.Count == 0)
-                return false;
-
             foreach (GoodsPlace cell in Spots)
-            {
-                if (CheckRequiredOfProductQuantity(cell.Product, cell.Number) == false)
-                {
-                    Console.WriteLine($"За время оформления заказа количество товара " +
-                                      $"\"{cell.Product.Name}\" на складе изменилось!");
-
-                    isEnoughQuantityOfAllProducts = false;
-                    break;
-                }
-            }
-
-            return isEnoughQuantityOfAllProducts;
+                EnsureProductQuantity(cell.Product, cell.Number);
         }
 
-        private bool CheckRequiredOfProductQuantity(Product product, int requiredNumber)
+        private void EnsureProductQuantity(Product product, int requiredNumber)
         {
             int currentNumber = _warehouse.GetNumberOfProduct(product);
-            bool result = currentNumber >= requiredNumber;
 
-            if (result == false)
+            if (currentNumber < requiredNumber)
                 throw new ArgumentOutOfRangeException(nameof(requiredNumber));
-
-            return result;
         }
 
         private float CalculateTotalSum()
@@ -235,12 +226,16 @@ namespace OnlineStore
 
     class Shop
     {
-        public readonly Warehouse Warehouse = new Warehouse();
-        public readonly Cart Cart;
-
-        public Shop()
+        public Shop(Warehouse warehouse)
         {
-            Cart = new Cart(Warehouse);
+            Warehouse = warehouse ?? throw new ArgumentNullException(nameof(warehouse));
+        }
+
+        public Warehouse Warehouse { get; private set; }
+
+        public Cart Cart()
+        {
+            return new Cart(Warehouse);
         }
     }
 
@@ -260,12 +255,12 @@ namespace OnlineStore
     {
         public GoodsPlace(Product products, int number)
         {
-            Product = products;
+            Product = products ?? throw new ArgumentNullException(nameof(products));
 
             if (number < 0)
-                Number = 0;
-            else
-                Number = number;
+                throw new ArgumentOutOfRangeException(nameof(number));
+
+            Number = number;
         }
 
         public Product Product { get; private set; }
@@ -281,7 +276,7 @@ namespace OnlineStore
 
         public void ReduceQuantity(int number)
         {
-            if (number <= 0)
+            if (number <= 0 && number > Number)
                 throw new ArgumentOutOfRangeException(nameof(number));
 
             Number -= number;
