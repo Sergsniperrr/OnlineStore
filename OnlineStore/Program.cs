@@ -55,7 +55,7 @@ namespace OnlineStore
     {
         private const int FailedSearchIndex = -1;
 
-        protected List<Cell> Cells = new List<Cell>();
+        protected List<Cell> Cells { get; } = new List<Cell>();
 
         public void ShowAllProducts()
         {
@@ -147,7 +147,7 @@ namespace OnlineStore
 
     class Cart : Storage
     {
-        private IWarehouse _warehouse;
+        private readonly IWarehouse _warehouse;
 
         public Cart(IWarehouse warehouse)
         {
@@ -156,19 +156,15 @@ namespace OnlineStore
 
         public Payment Order()
         {
-            Payment payment;
-            float totalSum;
-
             EnsureAllProductsQuantity();
 
-            totalSum = CalculateTotalSum();
-            payment = new Payment(totalSum, $"Оплата заказа на сумму - {totalSum} р.\n");
+            float totalSum = CalculateTotalSum();
 
             PickUpPurchasedGoodsFromWarehouse();
 
             Clear();
 
-            return payment;
+            return new Payment(totalSum, $"Оплата заказа на сумму - {totalSum} р.\n");
         }
 
         public override void Add(Product product, int count)
@@ -228,7 +224,7 @@ namespace OnlineStore
             Warehouse = warehouse ?? throw new ArgumentNullException(nameof(warehouse));
         }
 
-        public Warehouse Warehouse { get; private set; }
+        public Warehouse Warehouse { get; }
 
         public Cart CreateCart()
         {
